@@ -27,10 +27,8 @@ def load_data(sheet_name, columns):
             pd.DataFrame(columns=['StudentID', 'StudentName', 'Password']).to_excel(writer, sheet_name=STUDENTS_SHEET, index=False)
             pd.DataFrame(columns=['StudentID', 'CourseID', 'ClassID']).to_excel(writer, sheet_name=ENROLLMENTS_SHEET, index=False)
             pd.DataFrame(columns=['UserID', 'Password']).to_excel(writer, sheet_name=PASSWORDS_SHEET, index=False)
-        # Re-load the specific sheet after initial creation
         return pd.read_excel(DATA_FILE, sheet_name=sheet_name)
-    
-    # Check if the sheet exists
+
     xls = pd.ExcelFile(DATA_FILE)
     if sheet_name not in xls.sheet_names:
         print(f"Creating empty sheet '{sheet_name}' in {DATA_FILE}...")
@@ -299,9 +297,6 @@ class Admin:
             enrollments_df = pd.concat([enrollments_df, new_enrollment], ignore_index=True)
             save_data(enrollments_df, ENROLLMENTS_SHEET)
             
-            # if assignment_capacity > 0: 
-            #     courses_df.loc[assignment_idx, 'Capacity'] -= 1
-            #     save_data(courses_df, COURSES_SHEET)
             print(f"Enrollment added: {student_id} in Class {class_id}. Available capacity updated.")
 
         elif choice == '2':
@@ -351,10 +346,8 @@ class Admin:
         elif choice == '3':
             if not enrollments_df.empty:
                 print("\n--- All Enrollments ---")
-                # Fix: Specify suffixes to prevent CourseID renaming and keep the one from courses_df
                 merged_df = pd.merge(enrollments_df, courses_df[['ClassID', 'CourseID', 'CourseName']], 
                                      on='ClassID', how='left', suffixes=('_enrollment', ''))
-                # The '' suffix ensures 'CourseID' from courses_df remains 'CourseID'
                 
                 merged_df = pd.merge(merged_df, students_df[['StudentID', 'StudentName']], on='StudentID', how='left')
                 print(merged_df[['StudentID', 'StudentName', 'CourseID', 'ClassID', 'CourseName']].to_string(index=False))
@@ -451,7 +444,6 @@ class Faculty:
             return
 
         print(f"\n--- Your Assigned Courses ({self.faculty_name}) ---")
-        # Display courses in a user-friendly format
         merged_display_df = pd.merge(my_assigned_courses, faculty_df[['FacultyID', 'FacultyName']], on='FacultyID', how='left')
         print(merged_display_df[['ClassID', 'CourseID', 'CourseName', 'FacultyName']].to_string(index=False))
 
@@ -463,7 +455,6 @@ class Faculty:
             print(f"Error: Class ID '{class_id_to_reassign}' not found or not assigned to you.")
             return
 
-        # Get the index for direct modification in the main courses_df
         idx_in_courses_df = courses_df[courses_df['ClassID'] == class_id_to_reassign].index[0]
         
         print("\n--- Available Faculty Members ---")
@@ -479,7 +470,6 @@ class Faculty:
             print(f"Error: Faculty ID '{new_faculty_id}' not found. Reassignment cancelled.")
             return
 
-        # Perform the reassignment
         old_faculty_name = self.faculty_name
         old_course_name = courses_df.loc[idx_in_courses_df, 'CourseName']
         new_faculty_name = faculty_df[faculty_df['FacultyID'] == new_faculty_id]['FacultyName'].iloc[0]
@@ -590,26 +580,21 @@ class Student:
 
         chosen_class_id = input("Enter the Class ID of the faculty you want to choose: ").strip().upper()
 
-        # Find the correct row in the original courses_df using the chosen_class_id
         target_assignment_row = courses_df[courses_df['ClassID'] == chosen_class_id] 
         
         if target_assignment_row.empty:
             print("Invalid Class ID or the chosen class is full. Please choose from the list.")
             return
 
-        # Get the actual index from the original courses_df
         assignment_idx = target_assignment_row.index[0]
 
-        # Double-check for duplicate enrollment for this specific assignment
         if not enrollments_df[(enrollments_df['StudentID'] == self.student_id) & 
                               (enrollments_df['ClassID'] == chosen_class_id)].empty:
             print(f"You are already enrolled in this class ({chosen_class_id}).")
             return
 
-        # Now, `assignment_capacity` is correctly fetched from the row using its index in `courses_df`
         assignment_capacity = courses_df.loc[assignment_idx, 'Capacity'] 
-        
-        # Re-check current enrollments for the chosen assignment
+
         current_enrollment_count = enrollments_df[enrollments_df['ClassID'] == chosen_class_id].shape[0]
 
         if assignment_capacity > 0 and current_enrollment_count >= assignment_capacity:
@@ -620,15 +605,9 @@ class Student:
         enrollments_df = pd.concat([enrollments_df, new_enrollment], ignore_index=True)
         save_data(enrollments_df, ENROLLMENTS_SHEET)
         
-        # if assignment_capacity > 0:
-        #     courses_df.loc[assignment_idx, 'Capacity'] -= 1
-        #     save_data(courses_df, COURSES_SHEET)
-        
-        # Retrieve information for the confirmation message directly from the correct row
         enrolled_course_name = courses_df.loc[assignment_idx, 'CourseName']
         enrolled_faculty_id = courses_df.loc[assignment_idx, 'FacultyID']
-        
-        # Ensure faculty_df is reloaded or accessible here if it changes
+
         faculty_df_current = load_data(FACULTY_SHEET, ['FacultyID', 'FacultyName', 'Password']) 
         enrolled_faculty_name = faculty_df_current[faculty_df_current['FacultyID'] == enrolled_faculty_id]['FacultyName'].iloc[0] if enrolled_faculty_id in faculty_df_current['FacultyID'].values else "Unknown"
 
@@ -647,20 +626,18 @@ class Student:
             return
 
         print(f"\n--- Your Currently Enrolled Courses ({self.student_name}) ---")
-        # Display enrolled courses clearly
+
         merged_display_df = pd.merge(my_enrollments, courses_df[['ClassID', 'CourseID', 'CourseName']], on='ClassID', how='left')
         print(merged_display_df[['ClassID', 'CourseID', 'CourseName']].to_string(index=False))
 
         class_id_to_drop = input("Enter the Class ID of the course you wish to drop: ").strip().upper()
 
-        # Check if the student is actually enrolled in this class
         enrollment_to_drop = my_enrollments[my_enrollments['ClassID'] == class_id_to_drop]
 
         if enrollment_to_drop.empty:
             print(f"Error: You are not enrolled in Class ID '{class_id_to_drop}'.")
             return
 
-        # Get the index of the course in the main courses_df to update its capacity
         target_course_in_courses_df = courses_df[courses_df['ClassID'] == class_id_to_drop]
         if target_course_in_courses_df.empty:
             print(f"Error: Course data for Class ID '{class_id_to_drop}' not found. Cannot update capacity.")
@@ -670,15 +647,13 @@ class Student:
         course_name = courses_df.loc[course_idx, 'CourseName']
         course_capacity = courses_df.loc[course_idx, 'Capacity']
 
-        # Remove the enrollment record
         enrollments_df = enrollments_df[~((enrollments_df['StudentID'] == self.student_id) &
                                           (enrollments_df['ClassID'] == class_id_to_drop))]
         save_data(enrollments_df, ENROLLMENTS_SHEET)
 
-        # Update capacity if the course has a limited capacity
-        if course_capacity > 0:
-            courses_df.loc[course_idx, 'Capacity'] += 1
-            save_data(courses_df, COURSES_SHEET)
+        # if course_capacity > 0:
+        #     courses_df.loc[course_idx, 'Capacity'] += 1
+        #     save_data(courses_df, COURSES_SHEET)
 
         print(f"Successfully dropped '{course_name}' (ClassID: {class_id_to_drop}). Capacity updated.")
 
@@ -817,9 +792,6 @@ class Student:
 
         except Exception as e:
             print(f"An error occurred during the swap: {e}. No changes were saved.")
-            # Data is automatically reverted if an error occurs because we only save `temp_` DFs on success
-
-    
 
     def view_my_courses(self):
         """Student views their enrolled course assignments, including faculty."""
@@ -832,16 +804,9 @@ class Student:
         if not my_enrollments.empty:
             print(f"\n--- Course Assignments Enrolled by {self.student_name} ({self.student_id}) ---")
             
-            # Merge my_enrollments with courses_df.
-            # Since both have 'CourseID', we'll get 'CourseID_x' from enrollments and 'CourseID_y' from courses.
-            # We want the CourseID and CourseName from courses_df, which comes from the right side of the merge.
-            merged_df = pd.merge(my_enrollments, courses_df, on='ClassID', how='left', suffixes=('_enrollment', ''))
-            # The '' suffix means the CourseID from courses_df will retain its original name 'CourseID'.
-            # The CourseID from enrollments_df will become 'CourseID_enrollment'.
 
-            # If you want to explicitly drop the duplicate CourseID from enrollments:
-            # if 'CourseID_enrollment' in merged_df.columns:
-            #     merged_df = merged_df.drop(columns=['CourseID_enrollment'])
+            merged_df = pd.merge(my_enrollments, courses_df, on='ClassID', how='left', suffixes=('_enrollment', ''))
+
 
             merged_df = pd.merge(merged_df, faculty_df[['FacultyID', 'FacultyName']], on='FacultyID', how='left')
             
@@ -854,7 +819,6 @@ class Student:
             )
             merged_df['FacultyName'] = merged_df['FacultyName'].fillna('N/A')
 
-            # Now 'CourseID' refers to the one from courses_df after the merge with suffixes
             print(merged_df[['ClassID', 'CourseID', 'CourseName', 'FacultyName', 'Capacity', 'Remaining Seats']].to_string(index=False))
         else:
             print(f"No course assignments enrolled by {self.student_name} ({self.student_id}) yet.")
@@ -865,7 +829,6 @@ def main_menu():
     """Main menu for selecting user role and handling login."""
     print("--- Welcome to the Course Registration System ---")
     
-    # Initialize the Excel file and add default Admin password if not exists
     passwords_df = load_data(PASSWORDS_SHEET, ['UserID', 'Password'])
     if "ADMIN" not in passwords_df['UserID'].values:
         print("Adding default ADMIN user...")
