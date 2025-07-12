@@ -1,17 +1,16 @@
 import pandas as pd
 import os
 
-# --- Excel File Path ---
-DATA_FILE = 'data2.xlsx'
 
-# --- Sheet Names ---
+DATA_FILE = r"C:\college despktop\CODING\SE\data2.xlsx"
+
 COURSES_SHEET = 'Courses'
 FACULTY_SHEET = 'Faculty'
 STUDENTS_SHEET = 'Students'
 ENROLLMENTS_SHEET = 'Enrollments'
 PASSWORDS_SHEET = 'Passwords'
 
-# --- Helper Functions for Data Loading/Saving ---
+
 
 def load_data(sheet_name, columns):
     """
@@ -20,7 +19,6 @@ def load_data(sheet_name, columns):
     """
     if not os.path.exists(DATA_FILE):
         print(f"Creating empty {DATA_FILE}...")
-        # Create an empty Excel file with all necessary sheets
         with pd.ExcelWriter(DATA_FILE, engine='xlsxwriter') as writer:
             pd.DataFrame(columns=['ClassID', 'CourseID', 'CourseName', 'FacultyID', 'Capacity']).to_excel(writer, sheet_name=COURSES_SHEET, index=False)
             pd.DataFrame(columns=['FacultyID', 'FacultyName', 'Password']).to_excel(writer, sheet_name=FACULTY_SHEET, index=False)
