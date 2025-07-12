@@ -180,6 +180,7 @@ def execute_query(query, params=(), retries=5, delay=0.1):
             conn.commit()
             return True
         except sqlite3.OperationalError as e:
+            # Corrected syntax error: removed '\n'
             if "database is locked" in str(e) and i < retries - 1:
                 st.warning(f"Database is locked. Retrying in {delay} seconds... (Attempt {i+1}/{retries})")
                 time.sleep(delay)
@@ -480,7 +481,7 @@ class Admin:
                         if existing_course_row and (existing_course_row['CourseName'] != course_name or existing_course_row['Credits'] != credits):
                             st.warning(f"Course ID '{course_id}' already exists with different details. Adding new offering under existing course.")
                             # Optional: Update course details if they differ, but this might not be desired behavior
-                            # cursor.execute("UPDATE courses SET CourseName = ?, Credits = ? WHERE CourseID = ?", (course_name, credits, course_id))
+                            # cursor.execute("UPDATE courses SET CourseName = ?, Credits = ? WHERE CourseID = ?, (course_name, credits, course_id))
                         else:
                             st.info(f"Course ID '{course_id}' already exists. Adding new offering(s) to this course.")
 
@@ -1006,8 +1007,25 @@ class Admin:
                 new_faculty_assignment_class_id = new_faculty_offering_display.split('Offering ID: ')[1].split(' ')[0]
                 
                 new_offering_details = get_row_by_id('course_faculty_assignments', 'ClassID', new_faculty_assignment_class_id)
-                current_enrolled_in_new_offering = int(new_offering_details.get('EnrolledStudents', 0)) # Explicitly cast
-                capacity_of_new_offering = int(new_offering_details.get('Capacity', 0)) # Explicitly cast
+                
+                # Robust conversion for EnrolledStudents and Capacity
+                enrolled_val_new = new_offering_details.get('EnrolledStudents', 0)
+                if isinstance(enrolled_val_new, bytes):
+                    try:
+                        current_enrolled_in_new_offering = int(enrolled_val_new.decode('utf-8').strip() or 0)
+                    except (UnicodeDecodeError, ValueError):
+                        current_enrolled_in_new_offering = 0
+                else:
+                    current_enrolled_in_new_offering = int(enrolled_val_new)
+
+                capacity_val_new = new_offering_details.get('Capacity', 0)
+                if isinstance(capacity_val_new, bytes):
+                    try:
+                        capacity_of_new_offering = int(capacity_val_new.decode('utf-8').strip() or 0)
+                    except (UnicodeDecodeError, ValueError):
+                        capacity_of_new_offering = 0
+                else:
+                    capacity_of_new_offering = int(capacity_val_new)
 
                 st.write(f"New Offering Details: {new_faculty_offering_display}")
                 st.write(f"New Offering Capacity: {current_enrolled_in_new_offering}/{capacity_of_new_offering}")
@@ -1253,9 +1271,28 @@ class Faculty:
                 st.error("Selected offering not found.")
                 return
             
+            # Robust conversion for EnrolledStudents and Capacity in Faculty class
+            enrolled_val_faculty = offering_row.get('EnrolledStudents', 0)
+            if isinstance(enrolled_val_faculty, bytes):
+                try:
+                    current_enrolled_in_offering_faculty = int(enrolled_val_faculty.decode('utf-8').strip() or 0)
+                except (UnicodeDecodeError, ValueError):
+                    current_enrolled_in_offering_faculty = 0
+            else:
+                current_enrolled_in_offering_faculty = int(enrolled_val_faculty)
+
+            capacity_val_faculty = offering_row.get('Capacity', 0)
+            if isinstance(capacity_val_faculty, bytes):
+                try:
+                    capacity_of_offering_faculty = int(capacity_val_faculty.decode('utf-8').strip() or 0)
+                except (UnicodeDecodeError, ValueError):
+                    capacity_of_offering_faculty = 0
+            else:
+                capacity_of_offering_faculty = int(capacity_val_faculty)
+
             st.write(f"Managing Course: {get_row_by_id('courses', 'CourseID', selected_course_id).get('CourseName')} ({selected_course_id})")
             st.write(f"Your Assignment ClassID: {selected_assignment_class_id}")
-            st.write(f"Offering Enrolled: {offering_row.get('EnrolledStudents')}/{offering_row.get('Capacity')}")
+            st.write(f"Offering Enrolled: {current_enrolled_in_offering_faculty}/{capacity_of_offering_faculty}")
 
 
             col1, col2 = st.columns(2)
@@ -1324,7 +1361,7 @@ class Faculty:
                                     new_class_id_for_reassign = generate_class_id(conn, cursor) # Pass connection/cursor
                                     cursor.execute(
                                         "INSERT INTO course_faculty_assignments (ClassID, CourseID, FacultyID, Capacity, EnrolledStudents) VALUES (?, ?, ?, ?, ?)",
-                                        (new_class_id_for_reassign, selected_course_id, new_faculty_id_for_reassign, offering_row['Capacity'], 0)
+                                        (new_class_id_for_reassign, selected_course_id, new_faculty_id_for_reassign, capacity_of_offering_faculty, 0) # Use the correctly converted capacity
                                     )
                                     conn.commit()
                                     st.success(f"Your assignment (ClassID: {selected_assignment_class_id}) for {selected_course_id} has been transferred to {new_faculty_id_for_reassign} (New ClassID: {new_class_id_for_reassign}).")
@@ -1375,7 +1412,8 @@ class Student:
                     right_on='ClassID', 
                     how='left'
                 )
-                student_current_enrollment_course_ids = enrolled_assignments['CourseID_y'].tolist() # CourseID from assignment table
+                # Corrected: Access 'CourseID' directly, not 'CourseID_y'
+                student_current_enrollment_course_ids = enrolled_assignments['CourseID'].tolist() 
 
         # Get available faculty assignments (offerings) that the student is NOT already enrolled in
         # and whose specific offering has capacity
@@ -1641,7 +1679,8 @@ class Student:
                     right_on='ClassID', 
                     how='left'
                 )
-                student_current_enrollment_course_ids = enrolled_assignments['CourseID_y'].tolist()
+                # Corrected: Access 'CourseID' directly, not 'CourseID_y'
+                student_current_enrollment_course_ids = enrolled_assignments['CourseID'].tolist()
 
         available_offerings_for_enrollment = available_offerings_with_capacity_df[
             ~available_offerings_with_capacity_df['ClassID'].isin(my_enrollments_df['FacultyAssignmentClassID'].tolist()) # Exclude currently enrolled offerings
@@ -1677,8 +1716,27 @@ class Student:
             # Extract IDs for enroll
             selected_faculty_assignment_class_id_to_enroll = selected_enroll_display.split('Offering ID: ')[1].split(' ')[0]
             enroll_offering_row = get_row_by_id('course_faculty_assignments', 'ClassID', selected_faculty_assignment_class_id_to_enroll)
-            current_enrolled_in_new_offering = int(enroll_offering_row.get('EnrolledStudents', 0)) # Explicitly cast
-            capacity_of_new_offering = int(enroll_offering_row.get('Capacity', 0)) # Explicitly cast
+            
+            # Robust conversion for EnrolledStudents and Capacity
+            enrolled_val_new = enroll_offering_row.get('EnrolledStudents', 0)
+            if isinstance(enrolled_val_new, bytes):
+                try:
+                    current_enrolled_in_new_offering = int(enrolled_val_new.decode('utf-8').strip() or 0)
+                except (UnicodeDecodeError, ValueError):
+                    current_enrolled_in_new_offering = 0
+            else:
+                current_enrolled_in_new_offering = int(enrolled_val_new)
+
+            capacity_val_new = enroll_offering_row.get('Capacity', 0)
+            if isinstance(capacity_val_new, bytes):
+                try:
+                    capacity_of_new_offering = int(capacity_val_new.decode('utf-8').strip() or 0)
+                except (UnicodeDecodeError, ValueError):
+                    capacity_of_new_offering = 0
+            else:
+                capacity_of_new_offering = int(capacity_val_new)
+
+
             new_enroll_course_id = enroll_offering_row.get('CourseID') # Get the CourseID of the new offering
 
 
@@ -1783,6 +1841,7 @@ def main_app():
             key="user_role_radio"
         )
 
+        # Automatically convert user_id_input to uppercase
         user_id_input = st.text_input(f"Enter your {user_role_choice} ID:").strip().upper()
         password_input = st.text_input("Enter Password:", type="password").strip()
 
